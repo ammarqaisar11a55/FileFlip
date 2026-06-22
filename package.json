@@ -1,10 +1,10 @@
 {
   "name": "fileflip",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "fileflip_custom_index/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node fileflip_custom_index/server.js",
+    "dev": "nodemon fileflip_custom_index/server.js"
   },
   "keywords": [],
   "author": "",

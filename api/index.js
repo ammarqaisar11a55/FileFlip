@@ -15,7 +15,15 @@ module.exports = (req, res) => {
             stack: loadError.stack
         });
     }
-    return app(req, res);
+    try {
+        return app(req, res);
+    } catch (err) {
+        return res.status(500).json({
+            error: "Runtime error during request execution",
+            message: err.message,
+            stack: err.stack
+        });
+    }
 };
 
 
