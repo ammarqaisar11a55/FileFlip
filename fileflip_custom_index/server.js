@@ -12,14 +12,30 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
-const IS_VERCEL = Boolean(process.env.VERCEL);
-const RUNTIME_DIR = IS_VERCEL ? path.join('/tmp', 'fileflip') : ROOT;
+
+// Detect read-only/serverless environment dynamically
+let RUNTIME_DIR = ROOT;
+try {
+    const testFile = path.join(ROOT, '.write-test-' + Date.now());
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+} catch (e) {
+    RUNTIME_DIR = path.join('/tmp', 'fileflip');
+}
+const IS_VERCEL = (RUNTIME_DIR !== ROOT);
+
 const UPLOAD_DIR = path.join(RUNTIME_DIR, 'uploads');
 const OUTPUT_DIR = path.join(RUNTIME_DIR, 'outputs');
 const TEMP_DIR = path.join(RUNTIME_DIR, 'temp');
 
 [UPLOAD_DIR, OUTPUT_DIR, TEMP_DIR].forEach(dir => {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    try {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+    } catch (err) {
+        console.error(`Failed to create directory ${dir}:`, err);
+    }
 });
 
 // Clean old files every hour during local/server deployments.
