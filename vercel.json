@@ -1,13 +1,8 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.js": {
-      "includeFiles": "fileflip_custom_index/public/**"
-    }
-  },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
       "destination": "/api/index"
     }
   ]

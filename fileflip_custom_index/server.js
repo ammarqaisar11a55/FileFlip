@@ -110,15 +110,6 @@ function fail(res, err) {
     }); 
 }
 
-function loadSharp() {
-    try {
-        return require('sharp');
-    } catch (err) {
-        console.error('Sharp failed to load:', err);
-        throw new Error('Image conversion is temporarily unavailable in this deployment. Please check the Vercel function logs for the sharp native dependency.');
-    }
-}
-
 function parsePages(input, total) {
     if (!input) return [...Array(total).keys()];
     const selected = new Set();
@@ -395,19 +386,17 @@ app.post('/api/image-to-pdf', upload.array('files', 20), async (req, res) => {
             return res.status(400).json({ success: false, message: 'No files uploaded' });
         }
         
-        const sharp = loadSharp();
         const pdf = await PDFDocument.create();
         
         for (const file of req.files) {
             const imageBuffer = await fsp.readFile(file.path);
-            const image = await sharp(imageBuffer).toBuffer();
-            const metadata = await sharp(image).metadata();
-            
+            const ext = path.extname(file.originalname).toLowerCase();
+            const isPng = file.mimetype === 'image/png' || ext === '.png';
             let img;
-            if (metadata.format === 'png') {
-                img = await pdf.embedPng(image);
+            if (isPng) {
+                img = await pdf.embedPng(imageBuffer);
             } else {
-                img = await pdf.embedJpg(image);
+                img = await pdf.embedJpg(imageBuffer);
             }
             
             const page = pdf.addPage([img.width, img.height]);

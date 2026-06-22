@@ -15,10 +15,8 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "libreoffice-convert": "^1.8.1",
     "multer": "^2.1.1",
-    "pdf-lib": "^1.17.1",
-    "sharp": "^0.34.5"
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"
