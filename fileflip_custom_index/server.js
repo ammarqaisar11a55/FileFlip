@@ -4,9 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
 const { PDFDocument, degrees } = require('pdf-lib');
-const sharp = require('sharp');
 const archiver = require('archiver');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const { execFile } = require('child_process');
 const cors = require('cors');
 
@@ -68,7 +67,7 @@ app.use(express.static(path.join(ROOT, 'public')));
 
 const storage = multer.diskStorage({
     destination: (_, __, cb) => cb(null, UPLOAD_DIR),
-    filename: (_, file, cb) => cb(null, `${Date.now()}-${uuidv4()}${path.extname(file.originalname)}`)
+    filename: (_, file, cb) => cb(null, `${Date.now()}-${randomUUID()}${path.extname(file.originalname)}`)
 });
 
 const upload = multer({
@@ -82,7 +81,7 @@ function publicFile(filePath) {
 }
 
 function out(name) { 
-    return path.join(OUTPUT_DIR, `${Date.now()}-${uuidv4()}-${name}`); 
+    return path.join(OUTPUT_DIR, `${Date.now()}-${randomUUID()}-${name}`); 
 }
 
 async function cleanup(files=[]) { 
@@ -109,6 +108,15 @@ function fail(res, err) {
         success: false, 
         message: err.message || 'Something went wrong' 
     }); 
+}
+
+function loadSharp() {
+    try {
+        return require('sharp');
+    } catch (err) {
+        console.error('Sharp failed to load:', err);
+        throw new Error('Image conversion is temporarily unavailable in this deployment. Please check the Vercel function logs for the sharp native dependency.');
+    }
 }
 
 function parsePages(input, total) {
@@ -162,7 +170,7 @@ async function runLibreOffice(inputPath, outputExt) {
         }
         
         const libreOfficePath = getLibreOfficePath();
-        const outputFileName = `${Date.now()}-${uuidv4()}.${outputExt}`;
+        const outputFileName = `${Date.now()}-${randomUUID()}.${outputExt}`;
         const outputPath = path.join(OUTPUT_DIR, outputFileName);
         
         console.log(`Converting with LibreOffice: ${libreOfficePath}`);
@@ -387,6 +395,7 @@ app.post('/api/image-to-pdf', upload.array('files', 20), async (req, res) => {
             return res.status(400).json({ success: false, message: 'No files uploaded' });
         }
         
+        const sharp = loadSharp();
         const pdf = await PDFDocument.create();
         
         for (const file of req.files) {
