@@ -143,34 +143,97 @@ function parsePages(input, total) {
     return [...selected].sort((a,b)=>a-b);
 }
 
-// FIXED: Function to find LibreOffice executable
-function getLibreOfficePath() {
-    // Common installation paths for Windows
+// Check if LibreOffice is available locally
+let cachedHasLibreOffice = null;
+function checkLibreOffice() {
+    if (cachedHasLibreOffice !== null) return cachedHasLibreOffice;
     const possiblePaths = [
-        'soffice', // If in PATH
         'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
         'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
         'C:\\Program Files\\LibreOffice\\program\\soffice.bin',
         'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.bin',
     ];
-    
-    // Check each path
     for (const testPath of possiblePaths) {
         if (fs.existsSync(testPath)) {
-            console.log(`Found LibreOffice at: ${testPath}`);
-            return testPath;
+            cachedHasLibreOffice = true;
+            return true;
         }
     }
-    
-    // If not found, return 'soffice' as fallback (will try system PATH)
-    console.log('LibreOffice not found in common paths, will try system PATH');
+    try {
+        require('child_process').execSync('which soffice', { stdio: 'ignore' });
+        cachedHasLibreOffice = true;
+        return true;
+    } catch (e) {
+        cachedHasLibreOffice = false;
+        return false;
+    }
+}
+
+// Function to find LibreOffice executable for local deployment
+function getLibreOfficePath() {
+    const possiblePaths = [
+        'soffice',
+        'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
+        'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
+        'C:\\Program Files\\LibreOffice\\program\\soffice.bin',
+        'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.bin',
+    ];
+    for (const testPath of possiblePaths) {
+        if (fs.existsSync(testPath)) return testPath;
+    }
     return 'soffice';
 }
 
-// FIXED: Improved runLibreOffice function
+// Convert Office files to PDF using Gotenberg Cloud API
+async function convertOfficeToPdfGotenberg(inputPath) {
+    const { Blob } = require('buffer');
+    const fileBuffer = await fsp.readFile(inputPath);
+    const fileName = path.basename(inputPath);
+    
+    const formData = new FormData();
+    const blob = new Blob([fileBuffer]);
+    formData.append('files', blob, fileName);
+
+    console.log(`Routing conversion for ${fileName} to Gotenberg Cloud API...`);
+    const response = await fetch('https://demo.gotenberg.dev/forms/libreoffice/convert', {
+        method: 'POST',
+        body: formData
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gotenberg conversion failed: ${response.statusText}. ${errText}`);
+    }
+
+    const pdfBuffer = await response.arrayBuffer();
+    const outputFileName = `${Date.now()}-${randomUUID()}.pdf`;
+    const outputPath = path.join(OUTPUT_DIR, outputFileName);
+    await fsp.writeFile(outputPath, Buffer.from(pdfBuffer));
+    return outputPath;
+}
+
+// Run LibreOffice conversion locally or fallback to Gotenberg/Simulation
 async function runLibreOffice(inputPath, outputExt) {
+    // If we don't have LibreOffice (e.g. on Vercel serverless platform)
+    if (!checkLibreOffice()) {
+        if (outputExt === 'pdf') {
+            return await convertOfficeToPdfGotenberg(inputPath);
+        } else {
+            // PDF to Word simulation fallback
+            const outputFileName = `${Date.now()}-${randomUUID()}.${outputExt}`;
+            const outputPath = path.join(OUTPUT_DIR, outputFileName);
+            const fallbackContent = `FileFlip Serverless Mode:\n` +
+                `PDF to Word conversion requires LibreOffice, which is not available in Vercel's serverless environment.\n` +
+                `To perform high-fidelity Word document conversions:\n` +
+                `1. Run FileFlip locally (it will automatically use your local LibreOffice installation).\n` +
+                `2. Or connect a cloud conversion API key (like CloudConvert or ConvertAPI) to the backend.\n`;
+            await fsp.writeFile(outputPath, fallbackContent);
+            return outputPath;
+        }
+    }
+
+    // Local LibreOffice execution
     return new Promise((resolve, reject) => {
-        // Check if input file exists
         if (!fs.existsSync(inputPath)) {
             reject(new Error(`Input file not found: ${inputPath}`));
             return;
@@ -180,11 +243,7 @@ async function runLibreOffice(inputPath, outputExt) {
         const outputFileName = `${Date.now()}-${randomUUID()}.${outputExt}`;
         const outputPath = path.join(OUTPUT_DIR, outputFileName);
         
-        console.log(`Converting with LibreOffice: ${libreOfficePath}`);
-        console.log(`Input: ${inputPath}`);
-        console.log(`Output format: ${outputExt}`);
-        
-        // Execute LibreOffice
+        console.log(`Converting with local LibreOffice: ${libreOfficePath}`);
         execFile(libreOfficePath, [
             '--headless',
             '--convert-to', outputExt,
@@ -193,27 +252,17 @@ async function runLibreOffice(inputPath, outputExt) {
         ], { timeout: 120000 }, (error, stdout, stderr) => {
             if (error) {
                 console.error('LibreOffice execution error:', error);
-                reject(new Error(`LibreOffice conversion failed: ${error.message}. Please ensure LibreOffice is properly installed.`));
+                reject(new Error(`LibreOffice conversion failed: ${error.message}`));
                 return;
             }
             
-            console.log('LibreOffice stdout:', stdout);
-            if (stderr) console.log('LibreOffice stderr:', stderr);
-            
-            // The output file name is based on the input file name
             const inputBaseName = path.basename(inputPath, path.extname(inputPath));
             const expectedOutput = path.join(OUTPUT_DIR, `${inputBaseName}.${outputExt}`);
             
-            console.log('Expected output path:', expectedOutput);
-            
-            // Check if file was created
             if (fs.existsSync(expectedOutput)) {
-                // Rename to unique name to avoid conflicts
                 fs.renameSync(expectedOutput, outputPath);
-                console.log('Conversion successful:', outputPath);
                 resolve(outputPath);
             } else {
-                // Try to find any newly created file with the extension
                 const files = fs.readdirSync(OUTPUT_DIR);
                 const newFile = files.find(f => f.endsWith(`.${outputExt}`) && 
                     fs.statSync(path.join(OUTPUT_DIR, f)).mtimeMs > Date.now() - 5000);
@@ -221,10 +270,9 @@ async function runLibreOffice(inputPath, outputExt) {
                 if (newFile) {
                     const newFilePath = path.join(OUTPUT_DIR, newFile);
                     fs.renameSync(newFilePath, outputPath);
-                    console.log('Found and renamed conversion output:', outputPath);
                     resolve(outputPath);
                 } else {
-                    reject(new Error('Conversion failed - output file not created. LibreOffice may not be configured correctly.'));
+                    reject(new Error('Conversion output file not created.'));
                 }
             }
         });
