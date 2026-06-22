@@ -8,6 +8,19 @@ npm start
 ```
 Open: http://localhost:3000
 
+## Deploy to Vercel
+Use `fileflip_custom_index` as the Vercel project root directory.
+
+Recommended settings:
+- Framework Preset: Other
+- Install Command: `npm install`
+- Build Command: leave empty
+- Output Directory: leave empty
+
+`vercel.json` routes all requests through `server.js`, which serves both the static frontend and the API routes.
+
+Note: Vercel functions can write only to temporary storage. Uploaded and generated files are stored in `/tmp` during a function run and downloads are served through `/api/download/:filename`. Office conversions still require LibreOffice, which is not available in Vercel's standard serverless runtime.
+
 ## Working backend tools
 - PDF Merge
 - PDF Split

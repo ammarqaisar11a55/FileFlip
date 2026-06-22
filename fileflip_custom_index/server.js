@@ -13,16 +13,18 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
-const UPLOAD_DIR = path.join(ROOT, 'uploads');
-const OUTPUT_DIR = path.join(ROOT, 'outputs');
-const TEMP_DIR = path.join(ROOT, 'temp');
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const RUNTIME_DIR = IS_VERCEL ? path.join('/tmp', 'fileflip') : ROOT;
+const UPLOAD_DIR = path.join(RUNTIME_DIR, 'uploads');
+const OUTPUT_DIR = path.join(RUNTIME_DIR, 'outputs');
+const TEMP_DIR = path.join(RUNTIME_DIR, 'temp');
 
 [UPLOAD_DIR, OUTPUT_DIR, TEMP_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-// Clean old files every hour
-setInterval(() => {
+// Clean old files every hour during local/server deployments.
+function cleanOldFiles() {
     const oneHourAgo = Date.now() - 3600000;
     [UPLOAD_DIR, OUTPUT_DIR].forEach(dir => {
         if (fs.existsSync(dir)) {
@@ -40,7 +42,12 @@ setInterval(() => {
             });
         }
     });
-}, 3600000);
+}
+
+if (!IS_VERCEL) {
+    const cleanupTimer = setInterval(cleanOldFiles, 3600000);
+    cleanupTimer.unref();
+}
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -71,7 +78,7 @@ const upload = multer({
 });
 
 function publicFile(filePath) {
-    return `/outputs/${path.basename(filePath)}`;
+    return `/api/download/${encodeURIComponent(path.basename(filePath))}`;
 }
 
 function out(name) { 
@@ -524,4 +531,8 @@ app.get('/api/download/:filename', (req, res) => {
 // Health check
 app.get('/api/health', (_, res) => res.json({ success: true, app: 'FileFlip', status: 'running' }));
 
-app.listen(PORT, () => console.log(`FileFlip running at http://localhost:${PORT}`));
+if (require.main === module) {
+    app.listen(PORT, () => console.log(`FileFlip running at http://localhost:${PORT}`));
+}
+
+module.exports = app;
