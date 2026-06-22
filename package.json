@@ -1,7 +1,7 @@
 {
   "name": "fileflip",
   "version": "1.0.0",
-  "main": "fileflip_custom_index/server.js",
+  "main": "api/index.js",
   "scripts": {
     "start": "node fileflip_custom_index/server.js",
     "dev": "nodemon fileflip_custom_index/server.js"
